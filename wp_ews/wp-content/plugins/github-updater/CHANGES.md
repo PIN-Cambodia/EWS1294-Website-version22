@@ -1,5 +1,42 @@
 #### [unreleased]
 
+#### 8.7.2 / 2019-03-09
+* hotfix to add parity for themes and prevent PHP warning
+
+#### 8.7.1 / 2019-03-09
+* add new filter hook `github_updater_post_construct_download_link` to allow for returning your own download link
+* deprecate filter hook `github_updater_set_rollback_package` as the above replaces it
+* add _looser_ check of `Base::get_repo_slugs()`, thanks @sc0ttkclark
+* update `class Bitbucket_Server_API`, thanks @allrite for the access
+* added filter hook `github_updater_repo_cache_timeout` to change default timeout per repository, thanks @sc0ttkclark
+
+#### 8.7.0 / 2019-02-24
+* update `Readme_Parser` for changelog and description parsing
+* add filter `github_updater_temp_readme_filepath` to change default location if server has permissions issues, fixes [#766](https://github.com/afragen/github-updater/issues/766)
+* fix `Readme_Parser` to use `version_compare()` when checking compatibility with `create_contributors()`
+* add commit hash and timestamp to branch data, timestamp not returned by this particular GitHub API call 😞
+* add filter `github_updater_remote_is_newer` to use your own version comparison function
+
+#### 8.6.3 / 2019-02-04
+* use Update PHP messaging as in WP 5.1 in version check
+
+#### 8.6.2 / 2019-01-14
+* fix for bug with Bitbucket endpoints, fixes [#757](https://github.com/afragen/github-updater/issues/757)
+
+#### 8.6.1 / 2019-01-11
+* remove `tmp-readme.txt` after parsing, fixes [#754](https://github.com/afragen/github-updater/issues/754)
+* directly call `wp_cron()` after refreshing cache
+* update POT via `composer.json` and wp-cli
+* moved `get_file_headers()` to `trait GHU_Trait`
+* cleanup extra header key/value pairs
+* add endpoint to Bitbucket to get more than default number of tags, branches, or release assets. Fixes [#752](https://github.com/afragen/github-updater/issues/752) thanks @idpaterson
+
+#### 8.6.0 / 2018-12-28 🎂
+* add action hook `github_updater_post_rest_process_request` for @Raruto
+* add filter hook `github_updater_set_rollback_package` for @sc0ttclark and @moderntribe
+* return null for `API_Common::parse_release_asset()` when invalid `$response`, fixes [#750](https://github.com/afragen/github-updater/issues/750)
+* make GitHub private repos with release assets use redirect for download link, fixes [#751](https://github.com/afragen/github-updater/issues/751)
+
 #### 8.5.2 / 2018-12-10
 * fixed parsing of wp.org readme changelog items
 

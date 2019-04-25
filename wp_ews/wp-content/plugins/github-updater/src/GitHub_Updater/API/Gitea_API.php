@@ -100,7 +100,7 @@ class Gitea_API extends API implements API_Interface {
 	 *
 	 * @param string $changes Changelog filename.
 	 *
-	 * @return bool
+	 * @return mixed
 	 */
 	public function get_remote_changes( $changes ) {
 		return $this->get_remote_api_changes( 'gitea', $changes, "/repos/:owner/:repo/raw/:branch/{$changes}" );
@@ -109,7 +109,7 @@ class Gitea_API extends API implements API_Interface {
 	/**
 	 * Read and parse remote readme.txt.
 	 *
-	 * @return bool
+	 * @return mixed
 	 */
 	public function get_remote_readme() {
 		return $this->get_remote_api_readme( 'gitea', '/repos/:owner/:repo/raw/:branch/readme.txt' );
@@ -118,7 +118,7 @@ class Gitea_API extends API implements API_Interface {
 	/**
 	 * Read the repository meta from API.
 	 *
-	 * @return bool
+	 * @return mixed
 	 */
 	public function get_repo_meta() {
 		return $this->get_remote_api_repo_meta( 'gitea', '/repos/:owner/:repo' );
@@ -127,7 +127,7 @@ class Gitea_API extends API implements API_Interface {
 	/**
 	 * Create array of branches and download links as array.
 	 *
-	 * @return bool
+	 * @return mixed
 	 */
 	public function get_remote_branches() {
 		return $this->get_remote_api_branches( 'gitea', '/repos/:owner/:repo/branches' );
@@ -151,6 +151,7 @@ class Gitea_API extends API implements API_Interface {
 	 * @return string $endpoint
 	 */
 	public function construct_download_link( $branch_switch = false ) {
+		self::$method       = 'download_link';
 		$download_link_base = $this->get_api_url( '/repos/:owner/:repo/archive/', true );
 		$endpoint           = '';
 
@@ -169,9 +170,20 @@ class Gitea_API extends API implements API_Interface {
 			$endpoint = $branch_switch . '.zip';
 		}
 
-		$endpoint = $this->add_access_token_endpoint( $this, $endpoint );
+		$endpoint      = $this->add_access_token_endpoint( $this, $endpoint );
+		$download_link = $download_link_base . $endpoint;
 
-		return $download_link_base . $endpoint;
+		/**
+		 * Filter download link so developers can point to specific ZipFile
+		 * to use as a download link during a branch switch.
+		 *
+		 * @since 8.8.0
+		 *
+		 * @param string    $download_link Download URL.
+		 * @param /stdClass $this->type    Repository object.
+		 * @param string    $branch_switch Branch or tag for rollback or branch switching.
+		 */
+		return apply_filters( 'github_updater_post_construct_download_link', $download_link, $this->type, $branch_switch );
 	}
 
 	/**
@@ -190,6 +202,7 @@ class Gitea_API extends API implements API_Interface {
 			case 'tags':
 			case 'changes':
 			case 'translation':
+			case 'download_link':
 				break;
 			case 'branches':
 				$endpoint = add_query_arg( 'per_page', '100', $endpoint );
@@ -267,10 +280,30 @@ class Gitea_API extends API implements API_Interface {
 	}
 
 	/**
+	 * Parse API response and return array of branch data.
+	 *
+	 * @param \stdClass $response API response.
+	 *
+	 * @return array Array of branch data.
+	 */
+	public function parse_branch_response( $response ) {
+		if ( $this->validate_response( $response ) ) {
+			return $response;
+		}
+		$branches = [];
+		foreach ( $response as $branch ) {
+			$branches[ $branch->name ]['download']         = $this->construct_download_link( $branch->name );
+			$branches[ $branch->name ]['commit_hash']      = $branch->commit->id;
+			$branches[ $branch->name ]['commit_timestamp'] = $branch->commit->timestamp;
+		}
+		return $branches;
+	}
+
+	/**
 	 * Parse tags and create download links.
 	 *
-	 * @param $response
-	 * @param $repo_type
+	 * @param \stdClass|array $response Response from API call.
+	 * @param array           $repo_type
 	 *
 	 * @return array
 	 */

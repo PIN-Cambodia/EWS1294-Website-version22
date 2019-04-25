@@ -127,12 +127,16 @@ class GitHub_API extends API implements API_Interface {
 	 * @return string $endpoint
 	 */
 	public function construct_download_link( $branch_switch = false ) {
+		self::$method       = 'download_link';
 		$download_link_base = $this->get_api_url( '/repos/:owner/:repo/zipball/', true );
 		$endpoint           = '';
 
 		// Release asset.
 		if ( $this->type->release_asset && '0.0.0' !== $this->type->newest_tag ) {
 			$release_asset = $this->get_release_asset();
+			if ( property_exists( $this->type, 'is_private' ) && $this->type->is_private ) {
+				return $this->get_release_asset_redirect( $release_asset, true );
+			}
 			return $release_asset;
 		}
 
@@ -151,9 +155,20 @@ class GitHub_API extends API implements API_Interface {
 			$endpoint = $branch_switch;
 		}
 
-		$endpoint = $this->add_access_token_endpoint( $this, $endpoint );
+		$endpoint      = $this->add_access_token_endpoint( $this, $endpoint );
+		$download_link = $download_link_base . $endpoint;
 
-		return $download_link_base . $endpoint;
+		/**
+		 * Filter download link so developers can point to specific ZipFile
+		 * to use as a download link during a branch switch.
+		 *
+		 * @since 8.8.0
+		 *
+		 * @param string    $download_link Download URL.
+		 * @param /stdClass $this->type    Repository object.
+		 * @param string    $branch_switch Branch or tag for rollback or branch switching.
+		 */
+		return apply_filters( 'github_updater_post_construct_download_link', $download_link, $this->type, $branch_switch );
 	}
 
 	/**
@@ -199,8 +214,8 @@ class GitHub_API extends API implements API_Interface {
 	/**
 	 * Calculate and store time until rate limit reset.
 	 *
-	 * @param $response
-	 * @param $repo
+	 * @param array  $response HTTP headers.
+	 * @param string $repo Repo name.
 	 */
 	public static function ratelimit_reset( $response, $repo ) {
 		if ( isset( $response['headers']['x-ratelimit-reset'] ) ) {
@@ -294,10 +309,30 @@ class GitHub_API extends API implements API_Interface {
 	}
 
 	/**
+	 * Parse API response and return array of branch data.
+	 *
+	 * @param \stdClass $response API response.
+	 *
+	 * @return array Array of branch data.
+	 */
+	public function parse_branch_response( $response ) {
+		if ( $this->validate_response( $response ) ) {
+			return $response;
+		}
+		$branches = [];
+		foreach ( $response as $branch ) {
+			$branches[ $branch->name ]['download']    = $this->construct_download_link( $branch->name );
+			$branches[ $branch->name ]['commit_hash'] = $branch->commit->sha;
+			$branches[ $branch->name ]['commit_api']  = $branch->commit->url;
+		}
+		return $branches;
+	}
+
+	/**
 	 * Parse tags and create download links.
 	 *
-	 * @param $response
-	 * @param $repo_type
+	 * @param \stdClass|array $response Response from API call.
+	 * @param array           $repo_type
 	 *
 	 * @return array
 	 */
@@ -410,7 +445,7 @@ class GitHub_API extends API implements API_Interface {
 	/**
 	 * Add remote install settings fields.
 	 *
-	 * @param $type
+	 * @param string $type plugin|theme.
 	 */
 	public function add_install_settings_fields( $type ) {
 		add_settings_field(
@@ -452,8 +487,8 @@ class GitHub_API extends API implements API_Interface {
 	/**
 	 * Add remote install feature, create endpoint.
 	 *
-	 * @param $headers
-	 * @param $install
+	 * @param array $headers
+	 * @param array $install
 	 *
 	 * @return mixed
 	 */

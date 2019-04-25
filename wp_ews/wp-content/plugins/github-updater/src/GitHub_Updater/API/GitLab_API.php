@@ -191,6 +191,12 @@ class GitLab_API extends API implements API_Interface {
 		$endpoint = '';
 		$endpoint = add_query_arg( 'sha', $this->type->branch, $endpoint );
 
+		// Release asset.
+		if ( $this->type->ci_job && '0.0.0' !== $this->type->newest_tag ) {
+			$release_asset = $this->get_release_asset();
+			return $release_asset;
+		}
+
 		// If branch is master (default) and tags are used, use newest tag.
 		if ( 'master' === $this->type->branch && ! empty( $this->type->tags ) ) {
 			$endpoint = add_query_arg( 'sha', $this->type->newest_tag, $endpoint );
@@ -201,15 +207,20 @@ class GitLab_API extends API implements API_Interface {
 			$endpoint = add_query_arg( 'sha', $branch_switch, $endpoint );
 		}
 
-		// Release asset.
-		if ( $this->type->ci_job && '0.0.0' !== $this->type->newest_tag ) {
-			$release_asset = $this->get_release_asset();
-			return $release_asset;
-		}
+		$endpoint      = $this->add_access_token_endpoint( $this, $endpoint );
+		$download_link = $download_link_base . $endpoint;
 
-		$endpoint = $this->add_access_token_endpoint( $this, $endpoint );
-
-		return $download_link_base . $endpoint;
+		/**
+		 * Filter download link so developers can point to specific ZipFile
+		 * to use as a download link during a branch switch.
+		 *
+		 * @since 8.8.0
+		 *
+		 * @param string    $download_link Download URL.
+		 * @param /stdClass $this->type    Repository object.
+		 * @param string    $branch_switch Branch or tag for rollback or branch switching.
+		 */
+		return apply_filters( 'github_updater_post_construct_download_link', $download_link, $this->type, $branch_switch );
 	}
 
 	/**
@@ -240,6 +251,7 @@ class GitLab_API extends API implements API_Interface {
 				break;
 			case 'release_asset':
 				$endpoint = add_query_arg( 'job', $git->type->ci_job, $endpoint );
+				break;
 			default:
 				break;
 		}
@@ -268,7 +280,7 @@ class GitLab_API extends API implements API_Interface {
 		if ( ! $response ) {
 			self::$method = 'projects';
 			$id           = implode( '/', [ $this->type->owner, $this->type->slug ] );
-			$id           = urlencode( $id );
+			$id           = rawurlencode( $id );
 			$response     = $this->api( '/projects/' . $id );
 
 			if ( $this->validate_response( $response ) ) {
@@ -367,10 +379,30 @@ class GitLab_API extends API implements API_Interface {
 	}
 
 	/**
+	 * Parse API response and return array of branch data.
+	 *
+	 * @param \stdClass $response API response.
+	 *
+	 * @return array Array of branch data.
+	 */
+	public function parse_branch_response( $response ) {
+		if ( $this->validate_response( $response ) ) {
+			return $response;
+		}
+		$branches = [];
+		foreach ( $response as $branch ) {
+			$branches[ $branch->name ]['download']         = $this->construct_download_link( $branch->name );
+			$branches[ $branch->name ]['commit_hash']      = $branch->commit->id;
+			$branches[ $branch->name ]['commit_timestamp'] = $branch->commit->committed_date;
+		}
+		return $branches;
+	}
+
+	/**
 	 * Parse tags and create download links.
 	 *
-	 * @param $response
-	 * @param $repo_type
+	 * @param \stdClass|array $response Response from API call.
+	 * @param array           $repo_type
 	 *
 	 * @return array
 	 */
@@ -570,7 +602,7 @@ class GitLab_API extends API implements API_Interface {
 			$gitlab_com = false;
 		}
 
-		$id                       = urlencode( $install['github_updater_repo'] );
+		$id                       = rawurlencode( $install['github_updater_repo'] );
 		$install['download_link'] = "{$base}/api/v4/projects/{$id}/repository/archive.zip";
 		$install['download_link'] = add_query_arg( 'sha', $install['github_updater_branch'], $install['download_link'] );
 

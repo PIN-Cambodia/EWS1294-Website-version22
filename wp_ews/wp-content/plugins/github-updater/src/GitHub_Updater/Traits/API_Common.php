@@ -28,7 +28,7 @@ trait API_Common {
 	 * Decode API responses that are base64 encoded.
 	 *
 	 * @param string $git (github|bitbucket|gitlab|gitea)
-	 * @param mixed $response API response.
+	 * @param mixed  $response API response.
 	 * @return mixed $response
 	 */
 	private function decode_response( $git, $response ) {
@@ -36,6 +36,9 @@ trait API_Common {
 			case 'github':
 			case 'gitlab':
 				$response = isset( $response->content ) ? base64_decode( $response->content ) : $response;
+				break;
+			case 'bbserver':
+				$response = isset( $response->lines ) ? $this->bbserver_recombine_response( $response ) : $response;
 				break;
 		}
 
@@ -46,12 +49,13 @@ trait API_Common {
 	 * Parse API response that returns as stdClass.
 	 *
 	 * @param string $git     (github|bitbucket|gitlab|gitea)
-	 * @param mixed $response API response.
+	 * @param mixed  $response API response.
 	 * @return mixed $response
 	 */
 	private function parse_response( $git, $response ) {
 		switch ( $git ) {
 			case 'bitbucket':
+			case 'bbserver':
 				$response = isset( $response->values ) ? $response->values : $response;
 				break;
 		}
@@ -64,19 +68,27 @@ trait API_Common {
 	 *
 	 * @param string $git (github|bitbucket|gitlab|gitea)
 	 * @param string $request Query to API->api().
-	 * @param mixed $response API response.
+	 * @param mixed  $response API response.
 	 * @return string $response Release asset download link.
 	 */
 	private function parse_release_asset( $git, $request, $response ) {
 		switch ( $git ) {
 			case 'github':
-				$response = isset( $response->assets[0] ) && ! is_wp_error( $response ) ? $response->assets[0]->browser_download_url : $response;
+				$download_link = isset( $response->assets[0] ) && ! is_wp_error( $response ) ? $response->assets[0]->browser_download_url : null;
+
+				// Private repo.
+				$response = ( null !== $download_link && ( property_exists( $this->type, 'is_private' ) && $this->type->is_private ) ) ? $response->assets[0]->url : $download_link;
 				break;
 			case 'bitbucket':
 				$download_base = $this->get_api_url( $request, true );
-				$response      = isset( $response->values[0] ) && ! is_wp_error( $response ) ? $download_base . '/' . $response->values[0]->name : $response;
+				$response      = isset( $response->values[0] ) && ! is_wp_error( $response ) ? $download_base . '/' . $response->values[0]->name : null;
+				break;
+			case 'bbserver':
+				// TODO: make work.
 				break;
 			case 'gitlab':
+				$response = $this->get_api_url( $request );
+				break;
 			case 'gitea':
 				break;
 		}
@@ -167,9 +179,7 @@ trait API_Common {
 	public function get_remote_api_changes( $git, $changes, $request ) {
 		$response = isset( $this->response['changes'] ) ? $this->response['changes'] : false;
 
-		/*
-		 * Set response from local file if no update available.
-		 */
+		// Set $response from local file if no update available.
 		if ( ! $response && ! $this->can_update_repo( $this->type ) ) {
 			$response = $this->get_local_info( $this->type, $changes );
 		}
@@ -215,9 +225,7 @@ trait API_Common {
 
 		$response = isset( $this->response['readme'] ) ? $this->response['readme'] : false;
 
-		/*
-		 * Set $response from local file if no update available.
-		 */
+		// Set $response from local file if no update available.
 		if ( ! $response && ! $this->can_update_repo( $this->type ) ) {
 			$response = $this->get_local_info( $this->type, 'readme.txt' );
 		}
@@ -305,9 +313,7 @@ trait API_Common {
 			}
 
 			if ( $response ) {
-				foreach ( $response as $branch ) {
-					$branches[ $branch->name ] = $this->construct_download_link( $branch->name );
-				}
+				$branches             = $this->parse_branch_response( $response );
 				$this->type->branches = $branches;
 				$this->set_repo_cache( 'branches', $branches );
 
@@ -336,7 +342,7 @@ trait API_Common {
 
 		if ( ! $response ) {
 			self::$method = 'release_asset';
-			$response     = 'gitlab' === $git ? $this->get_api_url( $request ) : $this->api( $request );
+			$response     = $this->api( $request );
 			$response     = $this->parse_release_asset( $git, $request, $response );
 
 			if ( ! $response && ! is_wp_error( $response ) ) {

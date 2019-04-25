@@ -185,7 +185,7 @@ class Settings extends Base {
 	 * @access private
 	 */
 	private function options_tabs() {
-		$current_tab = isset( $_GET['tab'] ) ? $_GET['tab'] : 'github_updater_settings';
+		$current_tab = isset( $_GET['tab'] ) ? esc_attr( $_GET['tab'] ) : 'github_updater_settings';
 		echo '<h2 class="nav-tab-wrapper">';
 		foreach ( $this->settings_tabs() as $key => $name ) {
 			$active = ( $current_tab === $key ) ? 'nav-tab-active' : '';
@@ -200,7 +200,7 @@ class Settings extends Base {
 	 * @access private
 	 */
 	private function options_sub_tabs() {
-		$current_tab = isset( $_GET['subtab'] ) ? $_GET['subtab'] : 'github_updater';
+		$current_tab = isset( $_GET['subtab'] ) ? esc_attr( $_GET['subtab'] ) : 'github_updater';
 		echo '<h3 class="nav-tab-wrapper">';
 		foreach ( $this->settings_sub_tabs() as $key => $name ) {
 			$active = ( $current_tab === $key ) ? 'nav-tab-active' : '';
@@ -214,8 +214,8 @@ class Settings extends Base {
 	 */
 	public function create_admin_page() {
 		$action = is_multisite() ? 'edit.php?action=github-updater' : 'options.php';
-		$tab    = isset( $_GET['tab'] ) ? $_GET['tab'] : 'github_updater_settings';
-		$subtab = isset( $_GET['subtab'] ) ? $_GET['subtab'] : 'github_updater';
+		$tab    = isset( $_GET['tab'] ) ? esc_attr( $_GET['tab'] ) : 'github_updater_settings';
+		$subtab = isset( $_GET['subtab'] ) ? esc_attr( $_GET['subtab'] ) : 'github_updater';
 		$logo   = plugins_url( basename( GITHUB_UPDATER_DIR ) . '/assets/GitHub_Updater_logo_small.png' ); ?>
 		<div class="wrap github-updater-settings">
 			<h1>
@@ -488,7 +488,7 @@ class Settings extends Base {
 	/**
 	 * Check to see if it's an enterprise or private repo and set variables.
 	 *
-	 * @param $token
+	 * @param \stdClass $token Repo data.
 	 */
 	private function set_auth_required( $token ) {
 		// Set booleans for Enterprise repos.
@@ -551,12 +551,12 @@ class Settings extends Base {
 			echo '<p>' . esc_html__( 'The following plugins or themes might exist on wp.org, but any updates will be downloaded from their respective git repositories.', 'github-updater' ) . '</p>';
 
 			foreach ( $plugins as $plugin ) {
-				if ( in_array( $plugin->file, $overrides ) ) {
+				if ( in_array( $plugin->file, $overrides, true ) ) {
 					echo '<p>' . $dashicon_plugin . $plugin->name . '</p>';
 				}
 			}
 			foreach ( $themes as $theme ) {
-				if ( in_array( $theme->slug, $overrides ) ) {
+				if ( in_array( $theme->slug, $overrides, true ) ) {
 					echo '<p>' . $dashicon_theme . $theme->name . '</p>';
 				}
 			}
@@ -567,7 +567,7 @@ class Settings extends Base {
 	/**
 	 * Get the settings option array and print one of its values.
 	 *
-	 * @param $args
+	 * @param array $args
 	 */
 	public function token_callback_text( $args ) {
 		$name = isset( static::$options[ $args['id'] ] ) ? esc_attr( static::$options[ $args['id'] ] ) : '';
@@ -582,7 +582,7 @@ class Settings extends Base {
 	/**
 	 * Get the settings option array and print one of its values.
 	 *
-	 * @param $args
+	 * @param array $args
 	 */
 	public function token_callback_checkbox( $args ) {
 		$checked = isset( static::$options[ $args['id'] ] ) ? static::$options[ $args['id'] ] : null;
@@ -684,7 +684,7 @@ class Settings extends Base {
 				],
 				$redirect_url
 			);
-			wp_redirect( $location );
+			wp_safe_redirect( $location );
 			exit;
 		}
 	}
@@ -710,7 +710,7 @@ class Settings extends Base {
 	 *
 	 * @link http://codex.wordpress.org/Plugin_API/Filter_Reference/plugin_action_links_(plugin_file_name)
 	 *
-	 * @param $links
+	 * @param array $links
 	 *
 	 * @return array
 	 */

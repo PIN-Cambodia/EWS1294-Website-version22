@@ -169,6 +169,7 @@ class Bitbucket_API extends API implements API_Interface {
 	 * @return string $endpoint
 	 */
 	public function construct_download_link( $branch_switch = false ) {
+		self::$method       = 'download_link';
 		$download_link_base = $this->get_api_url( '/:owner/:repo/get/', true );
 		$endpoint           = '';
 
@@ -207,11 +208,23 @@ class Bitbucket_API extends API implements API_Interface {
 			}
 		}
 
-		return $download_link_base . $endpoint;
+		$download_link = $download_link_base . $endpoint;
+
+		/**
+		 * Filter download link so developers can point to specific ZipFile
+		 * to use as a download link during a branch switch.
+		 *
+		 * @since 8.8.0
+		 *
+		 * @param string    $download_link Download URL.
+		 * @param /stdClass $this->type    Repository object.
+		 * @param string    $branch_switch Branch or tag for rollback or branch switching.
+		 */
+		return apply_filters( 'github_updater_post_construct_download_link', $download_link, $this->type, $branch_switch );
 	}
 
 	/**
-	 * Added due to interface contract, not used for Bitbucket.
+	 * Create Bitbucket API endpoints.
 	 *
 	 * @param Bitbucket_API|API $git
 	 * @param string            $endpoint
@@ -219,6 +232,32 @@ class Bitbucket_API extends API implements API_Interface {
 	 * @return string|void $endpoint
 	 */
 	public function add_endpoints( $git, $endpoint ) {
+		switch ( $git::$method ) {
+			case 'file':
+			case 'readme':
+			case 'meta':
+			case 'changes':
+			case 'translation':
+			case 'release_asset':
+			case 'download_link':
+				break;
+			case 'tags':
+			case 'branches':
+				$endpoint = add_query_arg(
+					[
+						'pagelen' => '100',
+						'sort'    => '-name',
+					],
+					$endpoint
+				);
+				break;
+			default:
+				break;
+		}
+
+		$endpoint = $this->add_access_token_endpoint( $git, $endpoint );
+
+		return $endpoint;
 	}
 
 	/**
@@ -285,10 +324,30 @@ class Bitbucket_API extends API implements API_Interface {
 	}
 
 	/**
+	 * Parse API response and return array of branch data.
+	 *
+	 * @param \stdClass $response API response.
+	 *
+	 * @return array Array of branch data.
+	 */
+	public function parse_branch_response( $response ) {
+		if ( $this->validate_response( $response ) ) {
+			return $response;
+		}
+		$branches = [];
+		foreach ( $response as $branch ) {
+			$branches[ $branch->name ]['download']         = $this->construct_download_link( $branch->name );
+			$branches[ $branch->name ]['commit_hash']      = $branch->target->hash;
+			$branches[ $branch->name ]['commit_timestamp'] = $branch->target->date;
+		}
+		return $branches;
+	}
+
+	/**
 	 * Parse tags and create download links.
 	 *
-	 * @param $response
-	 * @param $repo_type
+	 * @param \stdClass|array $response Response from API call.
+	 * @param string          $repo_type
 	 *
 	 * @return array
 	 */
@@ -297,15 +356,16 @@ class Bitbucket_API extends API implements API_Interface {
 		$rollback = [];
 
 		foreach ( (array) $response as $tag ) {
-			$download_base    = implode(
-				'/',
-				[
-					$repo_type['base_download'],
-					$this->type->owner,
-					$this->type->slug,
-					'get/',
-				]
-			);
+			// $download_base    = implode(
+			// '/',
+			// [
+			// $repo_type['base_download'],
+			// $this->type->owner,
+			// $this->type->owner,
+			// 'get/',
+			// ]
+			// );
+			$download_base    = "{$repo_type['base_download']}/{$this->type->owner}/{$this->type->owner}/get/";
 			$tags[]           = $tag;
 			$rollback[ $tag ] = $download_base . $tag . '.zip';
 		}

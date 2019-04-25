@@ -28,10 +28,7 @@ $container = get_theme_mod( 'understrap_container_type' );
 
 					<div class="site-info">
 
-<!-- 						<?php understrap_site_info(); ?> -->
-						<p class="footer">
-							Copyright © 2018 EWS 1294 - Terms Of Service - Developed by People In Need.
-						</p>
+						<?php understrap_site_info(); ?>
 
 					</div><!-- .site-info -->
 
@@ -48,6 +45,7 @@ $container = get_theme_mod( 'understrap_container_type' );
 </div><!-- #page we need this extra closing tag here -->
 
 <?php wp_footer(); ?>
+
 
 </body>
 
